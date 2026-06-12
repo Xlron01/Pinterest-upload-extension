@@ -1,38 +1,61 @@
-const PINTEREST_URLS = [
-  'https://www.pinterest.com/pin-builder/',
-  'https://www.pinterest.com/pin-creation-tool/',
-];
+const PINTEREST_PIN_BUILDER = 'https://www.pinterest.com/pin-creation-tool/';
 
 export const TabManager = {
   async openPinterest() {
-    const existing = await chrome.tabs.query({ url: '*://www.pinterest.com/pin-builder/*' });
-    if (existing.length > 0) {
-      await chrome.tabs.update(existing[0].id, { active: true });
-      return existing[0];
+    const existingPins = await chrome.tabs.query({ url: '*://www.pinterest.com/pin-creation-tool/*' });
+    if (existingPins.length > 0) {
+      await chrome.tabs.update(existingPins[0].id, { url: PINTEREST_PIN_BUILDER, active: true });
+      await this.waitForPageLoad(existingPins[0].id);
+      return existingPins[0];
     }
 
-    const creationExisting = await chrome.tabs.query({ url: '*://www.pinterest.com/pin-creation-tool/*' });
-    if (creationExisting.length > 0) {
-      await chrome.tabs.update(creationExisting[0].id, { active: true });
-      return creationExisting[0];
+    const existingCreate = await chrome.tabs.query({ url: '*://www.pinterest.com/pin-creation-tool/*' });
+    if (existingCreate.length > 0) {
+      await chrome.tabs.update(existingCreate[0].id, { url: PINTEREST_PIN_BUILDER, active: true });
+      await this.waitForPageLoad(existingCreate[0].id);
+      return existingCreate[0];
     }
 
     const tab = await chrome.tabs.create({
-      url: PINTEREST_URLS[0],
+      url: PINTEREST_PIN_BUILDER,
       active: false,
     });
+
+    await this.waitForPageLoad(tab.id);
     return tab;
   },
 
-  async waitForContentScript(tabId, timeoutMs = 10000) {
+  async waitForPageLoad(tabId, timeoutMs = 15000) {
+    return new Promise((resolve) => {
+      let resolved = false;
+      const timer = setTimeout(() => {
+        if (!resolved) { resolved = true; resolve(); }
+      }, timeoutMs);
+
+      const listener = (updatedTabId, changeInfo) => {
+        if (updatedTabId !== tabId) return;
+        if (changeInfo.status === 'complete') {
+          chrome.tabs.onUpdated.removeListener(listener);
+          clearTimeout(timer);
+          if (!resolved) { resolved = true; resolve(); }
+        }
+      };
+
+      chrome.tabs.onUpdated.addListener(listener);
+    });
+  },
+
+  async waitForContentScript(tabId, timeoutMs) {
+    timeoutMs = timeoutMs || 15000;
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       try {
-        await chrome.tabs.sendMessage(tabId, { type: 'PING' });
-        return;
+        const response = await chrome.tabs.sendMessage(tabId, { type: 'PING' });
+        if (response && response.pong) return;
       } catch {
-        await new Promise(r => setTimeout(r, 200));
+        // Content script not yet injected, retry
       }
+      await new Promise(r => setTimeout(r, 300));
     }
     throw new Error('Content script not ready within timeout');
   },
@@ -45,8 +68,3 @@ export const TabManager = {
     }
   },
 };
-
-chrome.tabs.onRemoved.addListener((tabId) => {
-  // If a Pinterest tab is closed while a job is running,
-  // the job status update will be handled by the content script's error path
-});

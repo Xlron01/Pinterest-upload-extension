@@ -22,8 +22,9 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.pinterest.com/pin-builder/*",
-        "https://www.pinterest.com/pin-creation-tool/*"
+        "https://www.pinterest.com/pin-creation-tool/*",
+        "https://www.pinterest.com/pin-creation-tool/*",
+        "https://www.pinterest.com/pin/create/*"
       ],
       "js": [
         "content/humanizer.js",
@@ -43,7 +44,16 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   },
-  "web_accessible_resources": [],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "content/toast.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
   "icons": {
     "16": "assets/icon-16.png",
     "48": "assets/icon-48.png",

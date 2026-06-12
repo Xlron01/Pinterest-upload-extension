@@ -32,14 +32,14 @@ export async function handleSinglePin(info, tab) {
     return;
   }
 
-  const settings = await ConfigManager.getSettings();
-
   ToastBridge.send(tab.id, {
     status: 'fetching',
     message: 'Preparing image...',
   });
 
   const config = await ConfigManager.getConfig();
+  const settings = await ConfigManager.getSettings();
+
   const job = {
     jobId: crypto.randomUUID(),
     mediaType: info.mediaType || (info.srcUrl && info.srcUrl.includes('.mp4') ? 'video' : 'image'),
@@ -63,7 +63,7 @@ export async function handleSinglePin(info, tab) {
   if (!fetchResult.success) {
     ToastBridge.send(tab.id, {
       status: 'error',
-      message: `Failed to fetch image: ${fetchResult.error}`,
+      message: 'Failed to fetch image: ' + fetchResult.error,
     });
     return;
   }
@@ -73,13 +73,62 @@ export async function handleSinglePin(info, tab) {
   job.filename = fetchResult.filename;
   job.status = 'uploading';
 
-  const pinTab = await TabManager.openPinterest();
-  await TabManager.waitForContentScript(pinTab.id);
+  let pinTab;
+  try {
+    pinTab = await TabManager.openPinterest();
+  } catch (err) {
+    ToastBridge.send(tab.id, {
+      status: 'error',
+      message: 'Failed to open Pinterest tab',
+    });
+    return;
+  }
 
-  chrome.tabs.sendMessage(pinTab.id, {
-    type: MSG_TYPES.START_PIN_JOB,
-    job,
-  });
+  try {
+    await TabManager.waitForContentScript(pinTab.id, 20000);
+  } catch (err) {
+    ToastBridge.send(tab.id, {
+      status: 'error',
+      message: 'Pinterest page not ready. Are you logged into Pinterest?',
+    });
+    if (settings.autoCloseTab) {
+      chrome.tabs.remove(pinTab.id).catch(() => {});
+    }
+    return;
+  }
+
+  let response;
+  try {
+    response = await chrome.tabs.sendMessage(pinTab.id, {
+      type: MSG_TYPES.START_PIN_JOB,
+      job,
+    });
+  } catch (err) {
+    ToastBridge.send(tab.id, {
+      status: 'error',
+      message: 'Failed to communicate with Pinterest page',
+    });
+    if (settings.autoCloseTab) {
+      chrome.tabs.remove(pinTab.id).catch(() => {});
+    }
+    return;
+  }
+
+  if (response && response.success) {
+    ToastBridge.send(tab.id, {
+      status: 'done',
+      message: 'Pin published successfully!',
+    });
+  } else {
+    ToastBridge.send(tab.id, {
+      status: 'error',
+      message: 'Pin failed: ' + ((response && response.error) || 'Unknown error'),
+    });
+  }
+
+  if (settings.autoCloseTab) {
+    await TabManager.closePinterestTab(pinTab.id);
+  }
 }
 
 export async function handleBatchAdd(info, tab) {
@@ -89,7 +138,7 @@ export async function handleBatchAdd(info, tab) {
   if (jobs.length >= MAX_BATCH_SIZE) {
     ToastBridge.send(tab.id, {
       status: 'error',
-      message: `Queue full (max ${MAX_BATCH_SIZE} items)`,
+      message: 'Queue full (max ' + MAX_BATCH_SIZE + ' items)',
     });
     return;
   }
@@ -118,7 +167,7 @@ export async function handleBatchAdd(info, tab) {
 
   ToastBridge.send(tab.id, {
     status: 'fetching',
-    message: `Added to queue (${jobs.length}/${MAX_BATCH_SIZE})`,
+    message: 'Added to queue (' + jobs.length + '/' + MAX_BATCH_SIZE + ')',
   });
 
   chrome.action.setBadgeText({ text: String(jobs.length) });
@@ -139,7 +188,7 @@ export async function handleBatchRun(tab) {
 
     ToastBridge.send(job.sourceTabId, {
       status: 'uploading',
-      message: `Publishing ${i + 1} of ${jobs.length}...`,
+      message: 'Publishing ' + (i + 1) + ' of ' + jobs.length + '...',
     });
 
     const fetchResult = await Fetcher.fetchMedia(job.mediaUrl);
@@ -159,20 +208,29 @@ export async function handleBatchRun(tab) {
     job.selectors = config.selectors;
     job.timing = config.timing;
 
-    const pinTab = await TabManager.openPinterest();
-    await TabManager.waitForContentScript(pinTab.id);
+    let pinTab;
+    try {
+      pinTab = await TabManager.openPinterest();
+      await TabManager.waitForContentScript(pinTab.id, 20000);
 
-    const response = await chrome.tabs.sendMessage(pinTab.id, {
-      type: MSG_TYPES.START_PIN_JOB,
-      job,
-    });
+      const response = await chrome.tabs.sendMessage(pinTab.id, {
+        type: MSG_TYPES.START_PIN_JOB,
+        job,
+      });
 
-    if (settings.autoCloseTab) {
-      chrome.tabs.remove(pinTab.id);
+      job.status = (response && response.success) ? 'done' : 'error';
+      if (!response || !response.success) {
+        job.errorMessage = (response && response.error) || 'Unknown error';
+      }
+    } catch (err) {
+      job.status = 'error';
+      job.errorMessage = err.message;
     }
 
-    job.status = response?.success ? 'done' : 'error';
-    if (!response?.success) job.errorMessage = response?.error || 'Unknown error';
+    if (settings.autoCloseTab && pinTab) {
+      chrome.tabs.remove(pinTab.id).catch(() => {});
+    }
+
     await chrome.storage.local.set({ [STORAGE_KEYS.PENDING_JOBS]: jobs });
   }
 
@@ -187,8 +245,10 @@ export async function handleBatchRun(tab) {
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
   let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
   }
   return btoa(binary);
 }
@@ -200,10 +260,12 @@ export const ToastBridge = {
         target: { tabId },
         files: ['content/toast.js'],
       }).then(() => {
-        chrome.tabs.sendMessage(tabId, {
-          type: MSG_TYPES.SHOW_TOAST,
-          toast,
-        });
+        setTimeout(() => {
+          chrome.tabs.sendMessage(tabId, {
+            type: MSG_TYPES.SHOW_TOAST,
+            toast,
+          }).catch(() => {});
+        }, 100);
       }).catch(() => {});
     } catch (err) {
       console.warn('[PinFlow] ToastBridge failed:', err.message);

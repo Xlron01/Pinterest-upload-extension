@@ -1,4 +1,4 @@
-const DEFAULT_TIMING = {
+var DEFAULT_TIMING = {
   typingMinMs: 50,
   typingMaxMs: 150,
   wordPauseMs: 300,
@@ -8,29 +8,30 @@ const DEFAULT_TIMING = {
   publishWaitMs: 2000,
 };
 
-let _cfg = null;
+var _cfg = null;
 
 function getTimingConfig() {
   return _cfg || DEFAULT_TIMING;
 }
 
-const Humanizer = {
-  setTimingConfig(cfg) {
+var Humanizer = {
+  setTimingConfig: function (cfg) {
+    console.log('[PinFlow] Humanizer: timing config set', cfg);
     _cfg = cfg;
   },
 
-  delay(min, max) {
-    const ms = max
+  delay: function (min, max) {
+    var ms = max
       ? min + Math.random() * (max - min)
       : min * (0.8 + Math.random() * 0.4);
-    return new Promise(r => setTimeout(r, Math.round(ms)));
+    return new Promise(function (r) { setTimeout(r, Math.round(ms)); });
   },
 
-  async typeChar(el, char) {
-    const cfg = getTimingConfig();
-    const opts = {
+  typeChar: async function (el, char) {
+    var cfg = getTimingConfig();
+    var opts = {
       key: char,
-      code: 'Key' + char.toUpperCase(),
+      code: char === ' ' ? 'Space' : 'Key' + char.toUpperCase(),
       bubbles: true,
       cancelable: true,
     };
@@ -38,9 +39,17 @@ const Humanizer = {
     el.dispatchEvent(new KeyboardEvent('keydown', opts));
     el.dispatchEvent(new KeyboardEvent('keypress', opts));
 
-    if (el.tagName === 'INPUT') {
-      el.value += char;
-      el.dispatchEvent(new InputEvent('input', { bubbles: true, data: char }));
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+      var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype, 'value'
+      );
+      if (nativeInputValueSetter) {
+        nativeInputValueSetter.set.call(el, el.value + char);
+      } else {
+        el.value += char;
+      }
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
     } else {
       document.execCommand('insertText', false, char);
     }
@@ -49,20 +58,21 @@ const Humanizer = {
     await this.delay(cfg.typingMinMs, cfg.typingMaxMs);
   },
 
-  async wordPause() {
-    const cfg = getTimingConfig();
+  wordPause: async function () {
+    var cfg = getTimingConfig();
     await this.delay(cfg.wordPauseMs * 0.7, cfg.wordPauseMs * 1.3);
   },
 
-  async humanClick(el) {
-    const rect = el.getBoundingClientRect();
-    const x = rect.left + rect.width * (0.3 + Math.random() * 0.4);
-    const y = rect.top + rect.height * (0.3 + Math.random() * 0.4);
-    const evOpts = { bubbles: true, clientX: x, clientY: y };
+  humanClick: async function (el) {
+    var rect = el.getBoundingClientRect();
+    var x = rect.left + rect.width * (0.3 + Math.random() * 0.4);
+    var y = rect.top + rect.height * (0.3 + Math.random() * 0.4);
+    var evOpts = { bubbles: true, clientX: x, clientY: y };
 
     el.dispatchEvent(new MouseEvent('mouseover', evOpts));
     el.dispatchEvent(new MouseEvent('mouseenter', evOpts));
-    await this.delay(80, 200);
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await this.delay(100, 200);
     el.dispatchEvent(new MouseEvent('mousedown', evOpts));
     await this.delay(50, 120);
     el.dispatchEvent(new MouseEvent('mouseup', evOpts));
@@ -71,3 +81,4 @@ const Humanizer = {
 };
 
 window.PinFlowHumanizer = Humanizer;
+console.log('[PinFlow] Humanizer module loaded');
