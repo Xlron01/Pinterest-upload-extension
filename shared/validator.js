@@ -10,7 +10,7 @@ export function validateProfile(profile) {
   if (!Array.isArray(profile.hashtags)) return false;
   if (profile.hashtags.length > 20) return false;
   for (const tag of profile.hashtags) {
-    if (typeof tag !== 'string' || !tag.startsWith('#')) return false;
+    if (typeof tag !== 'string' || tag.trim().length === 0) return false;
   }
 
   if (typeof profile.websiteUrl !== 'string') return false;
@@ -86,6 +86,7 @@ export function sanitizeHashtags(input) {
     .split(/[,\s]+/)
     .map(tag => tag.trim())
     .filter(tag => tag.length > 0)
-    .map(tag => tag.startsWith('#') ? tag : '#' + tag)
+    .map(tag => tag.startsWith('#') ? tag.slice(1) : tag)
+    .filter(tag => tag.length > 0)
     .slice(0, 20);
 }

@@ -1,5 +1,7 @@
 # PinFlow — Chrome Extension
+
 ## Full Engineering Specification
+>
 > Architecture · Data Contracts · Interfaces · Selectors  
 > Manifest V3 · Chrome Extension · v1.0.0
 
@@ -112,7 +114,7 @@ pinflow/
   },
   "content_scripts": [{
     "matches": [
-      "https://www.pinterest.com/pin-builder/*",
+      
       "https://www.pinterest.com/pin-creation-tool/*"
     ],
     "js": ["content/humanizer.js", "content/pin-builder.js"],
@@ -826,27 +828,32 @@ function showToast({ status, message, duration = 4000 }) {
 كل مهندس في الفريق يلتزم بهذه القواعد بدون استثناء.
 
 ### DOM Rules
+
 - **ممنوع** استخدام class-based selectors مثل `.VTVmV8` — تتغير مع كل React build
 - **دائماً** اتبع هذا الترتيب: `data-test-id` > `ID` > `role` > `aria-label`
 - **دائماً** استخدم `waitForElement()` مع timeout — لا تفترض أبداً أن عنصراً موجود
 - **دائماً** dispatch events مع `{ bubbles: true }` وإلا React لن يستجيب
 
 ### Service Worker Rules
+
 - الـ Service Workers في MV3 مؤقتة — **ممنوع** حفظ state في متغيرات JS. استخدم `chrome.storage.local`
 - `ArrayBuffer` لا يمكن إرساله عبر `chrome.runtime.sendMessage` — حوّله لـ Base64 أولاً
 - الـ SW لا يملك أي وصول للـ DOM — كل DOM work يحدث في الـ Content Script فقط
 
 ### Timing Rules
+
 - **ممنوع** استخدام `setTimeout` مباشرة في `pin-builder.js` — استخدم `Humanizer.delay()` دائماً
 - **ممنوع** تنفيذ عمليتين DOM في نفس الـ tick — دائماً `await` بين الخطوات
 - حد أدنى 1 ثانية بين الخطوات الرئيسية (رفع → ملء → نشر)
 
 ### Error Handling Rules
+
 - **ممنوع** ترك promise rejection بدون معالجة — لا تكسر الـ Service Worker أبداً
 - **دائماً** لفّ `runPinJob()` في try/catch واستدعِ `updateStatus('error')` عند الفشل
 - **ممنوع** إظهار خطأ في console.error بدون toast مقابل يراه المستخدم
 
 ### Config Rules
+
 - **ممنوع** كتابة selector string hardcoded في ملفات JS — اقرأها دائماً من `remoteConfig.selectors`
 - **دائماً** validate الـ remote config مقابل الـ schema قبل حفظه في storage
 - سلسلة الـ fallback: `remoteConfig` → `cachedConfig` → `hardcoded defaults في constants.js`

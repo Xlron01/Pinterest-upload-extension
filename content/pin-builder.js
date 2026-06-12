@@ -12,6 +12,72 @@ var MSG_TYPES = {
 
 var Humanizer = window.PinFlowHumanizer;
 
+var DEFAULT_TIMING = {
+  typingMinMs: 50,
+  typingMaxMs: 150,
+  wordPauseMs: 300,
+  stepMinMs: 1000,
+  stepMaxMs: 2500,
+  uploadWaitMs: 3000,
+  publishWaitMs: 2000,
+};
+
+function getTiming() {
+  return Humanizer._cfg || DEFAULT_TIMING;
+}
+
+var FIELD_SELECTORS = {
+  fileInput: [
+    '[data-test-id="storyboard-upload-input"]',
+    'input[type="file"]',
+    'input[accept*="image"]',
+    'input[accept*="video"]',
+  ],
+  titleInput: [
+    '[data-test-id="storyboard-selector-title"]',
+    '#storyboard-selector-title',
+    'input[name*="title"]',
+    'input[placeholder*="title" i]',
+    'input[aria-label*="title" i]',
+  ],
+  websiteInput: [
+    '#WebsiteField',
+    '[data-test-id="website-field"]',
+    'input[name*="website"]',
+    'input[placeholder*="website" i]',
+    'input[placeholder*="link" i]',
+    'input[aria-label*="website" i]',
+    'input[aria-label*="link" i]',
+    'input[placeholder*="URL" i]',
+    'input[placeholder*="url" i]',
+    'input[placeholder*="رابط" i]',
+  ],
+  descriptionBox: [
+    'div[contenteditable="true"][aria-label="إضافة وصف مفصل"]',
+    '[data-test-id="storyboard-description-field-container"] [contenteditable="true"]',
+    '[data-test-id="comment-editor-container"] .public-DraftEditor-content[contenteditable="true"]',
+    '.public-DraftEditor-content[contenteditable="true"][role="combobox"]',
+    '[data-test-id="editor-with-mentions"] [contenteditable="true"]',
+    '[role="combobox"][contenteditable="true"].notranslate',
+    '[contenteditable="true"][aria-label*="description" i]',
+  ],
+  tagsInput: [
+    '#combobox-storyboard-interest-tags',
+    '[data-test-id="storyboard-interest-tags"]',
+    'input[placeholder*="tag" i]',
+    'input[placeholder*="search topic" i]',
+    'input[aria-label*="tag" i]',
+    'input[aria-label*="topic" i]',
+    'input[role="combobox"][aria-autocomplete="list"]',
+    'input[role="combobox"]',
+  ],
+  publishButton: [
+    '[data-test-id="storyboard-creation-nav-done"] button',
+    '[data-test-id*="save"] button',
+    '[data-test-id*="storyboard-creation-nav-done"] button',
+  ],
+};
+
 console.log('[PinFlow] Pin-Builder content script loaded');
 
 chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
@@ -44,32 +110,64 @@ async function runPinJob(job) {
     var file = base64ToFile(job.mediaBuffer, job.filename, job.mimeType);
     console.log('[PinFlow] File created:', file.name, file.type, file.size, 'bytes');
 
-    await uploadFile(job.selectors.fileInput, file);
+    var uploadInput = await findElement(FIELD_SELECTORS.fileInput, 10000);
+    if (!uploadInput) throw new Error('Upload input not found');
+    await doFileUpload(uploadInput, file);
     console.log('[PinFlow] File uploaded, waiting for Pinterest to process...');
 
-    await Humanizer.delay(job.timing.uploadWaitMs, job.timing.uploadWaitMs + 2000);
+    await Humanizer.delay(job.timing.uploadWaitMs, job.timing.uploadWaitMs + 3000);
+    await Humanizer.delay(job.timing.stepMinMs, job.timing.stepMaxMs);
+
     updateStatus(job.jobId, 'filling');
+    console.log('[PinFlow] === Starting field fill phase ===');
 
-    console.log('[PinFlow] Filling title field...');
-    await fillField(job.selectors.titleInput, job.title);
-    await Humanizer.delay(job.timing.stepMinMs, job.timing.stepMaxMs);
+    var usedElements = [];
 
-    console.log('[PinFlow] Filling website field...');
-    await fillField(job.selectors.websiteInput, job.websiteUrl);
-    await Humanizer.delay(job.timing.stepMinMs, job.timing.stepMaxMs);
+    var titleEl = await findDistinctElement(FIELD_SELECTORS.titleInput, usedElements, 8000);
+    if (titleEl) {
+      console.log('[PinFlow] Title field FOUND:', titleEl.selector);
+      await fillInputElement(titleEl.element, job.title);
+      usedElements.push(titleEl.element);
+      await Humanizer.delay(job.timing.stepMinMs, job.timing.stepMaxMs);
+    } else {
+      console.warn('[PinFlow] Title field NOT found');
+    }
 
-    var description = buildDescription(job.description, job.hashtags);
-    console.log('[PinFlow] Filling description field...');
-    await fillField(job.selectors.descriptionBox, description);
-    await Humanizer.delay(job.timing.stepMinMs, job.timing.stepMaxMs);
+    var websiteEl = await findDistinctElement(FIELD_SELECTORS.websiteInput, usedElements, 5000);
+    if (websiteEl) {
+      console.log('[PinFlow] Website field FOUND:', websiteEl.selector);
+      await fillInputElement(websiteEl.element, job.websiteUrl);
+      usedElements.push(websiteEl.element);
+      await Humanizer.delay(job.timing.stepMinMs, job.timing.stepMaxMs);
+    } else {
+      console.warn('[PinFlow] Website field NOT found');
+    }
 
-    console.log('[PinFlow] Filling tags field...');
-    await fillTagsField(job.selectors.tagsInput, job.hashtags);
+    var descEl = await findDistinctElement(FIELD_SELECTORS.descriptionBox, usedElements, 5000);
+    if (descEl) {
+      console.log('[PinFlow] Description field FOUND:', descEl.selector);
+      await fillContentEditable(descEl.element, job.description || '');
+      usedElements.push(descEl.element);
+      await Humanizer.delay(job.timing.stepMinMs, job.timing.stepMaxMs);
+    } else {
+      console.warn('[PinFlow] Description field NOT found');
+    }
+
+    var tagsEl = await findDistinctElement(FIELD_SELECTORS.tagsInput, usedElements, 5000);
+    if (tagsEl && job.hashtags && job.hashtags.length > 0) {
+      console.log('[PinFlow] Tags field FOUND:', tagsEl.selector);
+      var cleanTags = (job.hashtags || []).map(function (t) { return t.replace(/^#/, ''); }).filter(function (t) { return t.length > 0; });
+      await fillTagsField(tagsEl.element, cleanTags);
+      usedElements.push(tagsEl.element);
+      await Humanizer.delay(job.timing.stepMinMs, job.timing.stepMaxMs);
+    } else {
+      console.warn('[PinFlow] Tags field NOT found or no hashtags');
+    }
 
     updateStatus(job.jobId, 'publishing');
     console.log('[PinFlow] Looking for publish button...');
-    var publishBtn = await findPublishButton(job.selectors);
-    console.log('[PinFlow] Publish button found, clicking...');
+    var publishBtn = await findPublishButton(10000);
+    console.log('[PinFlow] Publish button found, clicking...', publishBtn);
     await Humanizer.humanClick(publishBtn);
     await Humanizer.delay(job.timing.publishWaitMs, job.timing.publishWaitMs + 1500);
 
@@ -93,144 +191,235 @@ function base64ToFile(base64, filename, mimeType) {
   return new File([blob], filename, { type: mimeType });
 }
 
-async function uploadFile(selector, file) {
-  console.log('[PinFlow] Uploading file, looking for selector:', selector);
-  var input = await waitForElement(selector, 10000);
-  if (!input) throw new Error('Upload input not found: ' + selector);
-
-  console.log('[PinFlow] Upload input found:', input.tagName, input.type);
-
+async function doFileUpload(input, file) {
   var dt = new DataTransfer();
   dt.items.add(file);
   input.files = dt.files;
-
   input.dispatchEvent(new Event('input', { bubbles: true }));
   input.dispatchEvent(new Event('change', { bubbles: true }));
   console.log('[PinFlow] File dispatched to input');
 }
 
-async function fillField(selector, value) {
+async function fillInputElement(el, value) {
   if (!value) return;
 
-  console.log('[PinFlow] Filling field:', selector, 'with value length:', value.length);
-  var el = await waitForElement(selector, 8000);
-  if (!el) throw new Error('Field not found: ' + selector);
+  el.focus();
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  await Humanizer.delay(300, 500);
+
+  var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+
+  if (nativeSetter) {
+    nativeSetter.set.call(el, '');
+  } else {
+    el.value = '';
+  }
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+
+  await Humanizer.delay(100, 200);
+
+  for (var i = 0; i < value.length; i++) {
+    var ch = value[i];
+    if (nativeSetter) {
+      nativeSetter.set.call(el, el.value + ch);
+    } else {
+      el.value += ch;
+    }
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    await Humanizer.delay(getTiming().typingMinMs, getTiming().typingMaxMs);
+  }
+
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  el.dispatchEvent(new Event('blur', { bubbles: true }));
+  console.log('[PinFlow] INPUT field filled. Final value:', el.value);
+}
+
+async function fillContentEditable(el, value) {
+  if (!value) return;
+
+  var innerSpan = el.querySelector('span[data-offset-key]');
 
   el.focus();
   await Humanizer.delay(200, 400);
 
-  if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
-    var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLInputElement.prototype, 'value'
-    );
-    if (nativeInputValueSetter) {
-      nativeInputValueSetter.set.call(el, '');
+  var selection = window.getSelection();
+  var range = document.createRange();
+
+  if (innerSpan) {
+    console.log('[PinFlow] Description: using inner span approach');
+    range.selectNodeContents(innerSpan);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.execCommand('insertText', false, value);
+  } else {
+    console.log('[PinFlow] Description: no inner span, using direct approach');
+    range.selectNodeContents(el);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.execCommand('insertText', false, value);
+  }
+
+  el.blur();
+  await Humanizer.delay(200, 400);
+
+  console.log('[PinFlow] Description filled. Text length:', (el.textContent || '').length);
+}
+
+async function fillTagsField(el, tags) {
+  if (!tags || tags.length === 0) return;
+
+  console.log('[PinFlow] Filling tags:', tags.join(', '));
+
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  await Humanizer.delay(300, 500);
+
+  for (var i = 0; i < tags.length; i++) {
+    var tag = tags[i].trim();
+    if (!tag) continue;
+
+    console.log('[PinFlow] === Typing tag ' + (i + 1) + '/' + tags.length + ':', tag);
+
+    el.focus();
+    await Humanizer.delay(200, 300);
+
+    var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+    if (nativeSetter) {
+      nativeSetter.set.call(el, '');
     } else {
       el.value = '';
     }
     el.dispatchEvent(new Event('input', { bubbles: true }));
 
-    for (var i = 0; i < value.length; i++) {
-      var ch = value[i];
-      if (nativeInputValueSetter) {
-        nativeInputValueSetter.set.call(el, el.value + ch);
+    for (var j = 0; j < tag.length; j++) {
+      var ch = tag[j];
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: ch, code: 'Key' + ch.toUpperCase(), bubbles: true, cancelable: true }));
+      el.dispatchEvent(new KeyboardEvent('keypress', { key: ch, code: 'Key' + ch.toUpperCase(), bubbles: true, cancelable: true }));
+      if (nativeSetter) {
+        nativeSetter.set.call(el, el.value + ch);
       } else {
         el.value += ch;
       }
       el.dispatchEvent(new Event('input', { bubbles: true }));
-      await Humanizer.delay(getTimingConfigSafe().typingMinMs, getTimingConfigSafe().typingMaxMs);
-      if (ch === ' ') {
-        await Humanizer.wordPause();
+      el.dispatchEvent(new KeyboardEvent('keyup', { key: ch, code: 'Key' + ch.toUpperCase(), bubbles: true }));
+      await Humanizer.delay(getTiming().typingMinMs + 30, getTiming().typingMaxMs + 80);
+    }
+
+    console.log('[PinFlow] Typed tag text, waiting for dropdown...');
+    await Humanizer.delay(1500, 2000);
+
+    var suggestionClicked = await findAndClickFirstSuggestion(el);
+    if (suggestionClicked) {
+      console.log('[PinFlow] Tag suggestion clicked for:', tag);
+    } else {
+      console.log('[PinFlow] No suggestion found for tag: "' + tag + '" - skipping');
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+    }
+
+    await Humanizer.delay(500, 800);
+  }
+
+  el.blur();
+  console.log('[PinFlow] Tags fill completed');
+}
+
+async function findAndClickFirstSuggestion(inputEl) {
+  var container = inputEl.closest('[class*="combobox"], [class*="Combobox"], [role="combobox"]');
+  if (!container) {
+    container = inputEl.parentElement;
+  }
+
+  for (var attempt = 0; attempt < 3; attempt++) {
+    var lists = document.querySelectorAll('[role="listbox"]');
+    for (var li = 0; li < lists.length; li++) {
+      var list = lists[li];
+      if (!isVisible(list)) continue;
+
+      var options = list.querySelectorAll('[role="option"]');
+      if (options.length > 0) {
+        var firstOption = options[0];
+        if (isVisible(firstOption)) {
+          console.log('[PinFlow] Clicking first suggestion:', (firstOption.textContent || '').trim().substring(0, 50));
+          firstOption.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          await Humanizer.delay(200, 400);
+          await Humanizer.humanClick(firstOption);
+          return true;
+        }
+      }
+
+      var items = list.querySelectorAll('li');
+      if (items.length > 0 && isVisible(items[0])) {
+        console.log('[PinFlow] Clicking first li suggestion:', (items[0].textContent || '').trim().substring(0, 50));
+        items[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        await Humanizer.delay(200, 400);
+        await Humanizer.humanClick(items[0]);
+        return true;
       }
     }
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-  } else {
-    el.focus();
-    document.execCommand('selectAll');
-    document.execCommand('delete');
-    await Humanizer.delay(100, 200);
 
-    for (var j = 0; j < value.length; j++) {
-      var ch2 = value[j];
-      document.execCommand('insertText', false, ch2);
-      await Humanizer.delay(getTimingConfigSafe().typingMinMs, getTimingConfigSafe().typingMaxMs);
-      if (ch2 === ' ') {
-        await Humanizer.wordPause();
+    var allOptions = document.querySelectorAll('[role="option"]');
+    var visibleOptions = [];
+    for (var k = 0; k < allOptions.length; k++) {
+      if (isVisible(allOptions[k])) {
+        visibleOptions.push(allOptions[k]);
       }
+    }
+    if (visibleOptions.length > 0) {
+      console.log('[PinFlow] Clicking visible option:', (visibleOptions[0].textContent || '').trim().substring(0, 50));
+      visibleOptions[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      await Humanizer.delay(200, 400);
+      await Humanizer.humanClick(visibleOptions[0]);
+      return true;
+    }
+
+    if (attempt < 2) {
+      console.log('[PinFlow] No suggestions found, retrying... (attempt ' + (attempt + 1) + ')');
+      await Humanizer.delay(800, 1200);
     }
   }
 
-  console.log('[PinFlow] Field filled successfully');
+  console.log('[PinFlow] No suggestions found after all attempts');
+  return false;
 }
 
-function getTimingConfigSafe() {
-  return Humanizer._cfg || Humanizer._timing || DEFAULT_TIMING;
-}
-
-var DEFAULT_TIMING = {
-  typingMinMs: 50,
-  typingMaxMs: 150,
-  wordPauseMs: 300,
-  stepMinMs: 1000,
-  stepMaxMs: 2500,
-  uploadWaitMs: 3000,
-  publishWaitMs: 2000,
-};
-
-async function fillTagsField(selector, hashtags) {
-  if (!hashtags || hashtags.length === 0) return;
-
-  console.log('[PinFlow] Filling tags:', hashtags.join(', '));
-  var el = await waitForElement(selector, 8000);
-  if (!el) throw new Error('Tags field not found: ' + selector);
-
-  el.focus();
-  await Humanizer.delay(200, 400);
-
-  for (var i = 0; i < hashtags.length; i++) {
-    var tag = hashtags[i];
-    for (var j = 0; j < tag.length; j++) {
-      await Humanizer.typeChar(el, tag[j]);
-    }
-
-    if (i < hashtags.length - 1) {
-      await Humanizer.delay(100, 200);
-    }
-
-    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
-    el.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', bubbles: true }));
-    el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));
-    await Humanizer.delay(300, 600);
-  }
-}
-
-async function findPublishButton(selectors, timeoutMs) {
+async function findPublishButton(timeoutMs) {
   timeoutMs = timeoutMs || 10000;
   var start = Date.now();
 
   while (Date.now() - start < timeoutMs) {
-    var btn = document.querySelector(selectors.publishButton);
-    if (btn && isVisible(btn)) {
-      console.log('[PinFlow] Publish button found via selector:', selectors.publishButton);
-      return btn;
+    for (var s = 0; s < FIELD_SELECTORS.publishButton.length; s++) {
+      var el = document.querySelector(FIELD_SELECTORS.publishButton[s]);
+      if (el && isVisible(el)) {
+        console.log('[PinFlow] Publish button found via:', FIELD_SELECTORS.publishButton[s]);
+        return el;
+      }
     }
 
     var buttons = [].slice.call(document.querySelectorAll('button'));
-    btn = buttons.find(function (b) {
-      var ariaLabel = (b.getAttribute('aria-label') || '').toLowerCase();
+    for (var i = 0; i < buttons.length; i++) {
+      var b = buttons[i];
+      if (!isVisible(b)) continue;
+
       var text = (b.textContent || '').trim().toLowerCase();
+      var ariaLabel = (b.getAttribute('aria-label') || '').toLowerCase();
       var testId = (b.getAttribute('data-test-id') || '').toLowerCase();
-      return ariaLabel.indexOf('save') !== -1 ||
-        text.indexOf('save') !== -1 ||
-        testId.indexOf('save') !== -1 ||
-        ariaLabel.indexOf('publish') !== -1 ||
-        text.indexOf('publish') !== -1 ||
-        ariaLabel.indexOf('pin') !== -1 ||
-        text.indexOf('pin it') !== -1;
-    });
-    if (btn && isVisible(btn)) {
-      console.log('[PinFlow] Publish button found via fallback search');
-      return btn;
+
+      if (text === 'نشر' || text === 'publish' || text === 'save' ||
+          ariaLabel.indexOf('save') !== -1 || ariaLabel.indexOf('publish') !== -1 ||
+          testId.indexOf('save') !== -1 || testId.indexOf('publish') !== -1 ||
+          testId.indexOf('done') !== -1) {
+        console.log('[PinFlow] Publish button found via fallback:', text || ariaLabel || testId);
+        return b;
+      }
+    }
+
+    var publishDiv = document.querySelector('[data-test-id="storyboard-creation-nav-done"]');
+    if (publishDiv) {
+      var btn = publishDiv.querySelector('button');
+      if (btn && isVisible(btn)) {
+        console.log('[PinFlow] Publish button found via storyboard-creation-nav-done');
+        return btn;
+      }
     }
 
     await Humanizer.delay(500);
@@ -239,38 +428,21 @@ async function findPublishButton(selectors, timeoutMs) {
   throw new Error('Publish button not found within timeout');
 }
 
-function isVisible(el) {
-  if (!el) return false;
-  var style = window.getComputedStyle(el);
-  return style.display !== 'none' &&
-    style.visibility !== 'hidden' &&
-    parseFloat(style.opacity) > 0 &&
-    el.offsetParent !== null;
-}
-
-function buildDescription(description, hashtags) {
-  var tagStr = (hashtags && hashtags.length > 0)
-    ? '\n\n' + hashtags.join(' ')
-    : '';
-  return (description || '') + tagStr;
-}
-
-function waitForElement(selector, timeoutMs) {
+function findElement(selectorsList, timeoutMs) {
   timeoutMs = timeoutMs || 8000;
   return new Promise(function (resolve) {
-    var el = document.querySelector(selector);
-    if (el) {
-      console.log('[PinFlow] Element found immediately:', selector);
-      return resolve(el);
+    var result = tryFindElement(selectorsList);
+    if (result) {
+      console.log('[PinFlow] Element found immediately:', result.selector);
+      return resolve(result.element);
     }
 
-    console.log('[PinFlow] Waiting for element:', selector);
     var observer = new MutationObserver(function () {
-      var el = document.querySelector(selector);
-      if (el) {
-        console.log('[PinFlow] Element found via observer:', selector);
+      var result = tryFindElement(selectorsList);
+      if (result) {
+        console.log('[PinFlow] Element found via observer:', result.selector);
         observer.disconnect();
-        resolve(el);
+        resolve(result.element);
       }
     });
 
@@ -278,16 +450,50 @@ function waitForElement(selector, timeoutMs) {
 
     setTimeout(function () {
       observer.disconnect();
-      var el = document.querySelector(selector);
-      if (el) {
-        console.log('[PinFlow] Element found on timeout:', selector);
-        resolve(el);
+      var result = tryFindElement(selectorsList);
+      if (result) {
+        console.log('[PinFlow] Element found on timeout:', result.selector);
+        resolve(result.element);
       } else {
-        console.warn('[PinFlow] Element NOT found after timeout:', selector);
+        console.warn('[PinFlow] Element NOT found. Tried:', selectorsList);
         resolve(null);
       }
     }, timeoutMs);
   });
+}
+
+function findDistinctElement(selectorsList, excludeElements, timeoutMs) {
+  return findElement(selectorsList, timeoutMs).then(function (el) {
+    if (!el) return null;
+
+    for (var i = 0; i < excludeElements.length; i++) {
+      if (excludeElements[i] === el) {
+        console.warn('[PinFlow] Found element already used for another field, skipping');
+        return null;
+      }
+    }
+
+    return { element: el, selector: 'distinct' };
+  });
+}
+
+function tryFindElement(selectorsList) {
+  for (var i = 0; i < selectorsList.length; i++) {
+    var el = document.querySelector(selectorsList[i]);
+    if (el) {
+      return { element: el, selector: selectorsList[i] };
+    }
+  }
+  return null;
+}
+
+function isVisible(el) {
+  if (!el) return false;
+  var style = window.getComputedStyle(el);
+  return style.display !== 'none' &&
+    style.visibility !== 'hidden' &&
+    parseFloat(style.opacity) > 0 &&
+    (el.offsetWidth > 0 || el.offsetHeight > 0);
 }
 
 function updateStatus(jobId, status, error) {
