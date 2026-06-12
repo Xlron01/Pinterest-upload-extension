@@ -1,4 +1,4 @@
-import { MSG_TYPES, STORAGE_KEYS, MAX_BATCH_SIZE } from '../shared/constants.js';
+import { MSG_TYPES, STORAGE_KEYS, MAX_BATCH_SIZE, AUTHOR_NAME, filterTitle } from '../shared/constants.js';
 import { ConfigManager } from './config-manager.js';
 import { Fetcher } from './fetcher.js';
 import { TabManager } from './tab-manager.js';
@@ -47,7 +47,7 @@ export async function handleSinglePin(info, tab) {
     mediaBuffer: null,
     mimeType: '',
     filename: '',
-    title: tab.title || '',
+    title: filterTitle(tab.title || ''),
     description: profile.description,
     hashtags: profile.hashtags,
     websiteUrl: profile.websiteUrl,
@@ -150,7 +150,7 @@ export async function handleBatchAdd(info, tab) {
     jobId: crypto.randomUUID(),
     mediaType: info.mediaType || 'image',
     mediaUrl: info.srcUrl,
-    title: tab.title || '',
+    title: filterTitle(tab.title || ''),
     description: profile ? profile.description : '',
     hashtags: profile ? profile.hashtags : [],
     websiteUrl: profile ? profile.websiteUrl : '',

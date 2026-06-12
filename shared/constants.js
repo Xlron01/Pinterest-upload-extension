@@ -40,13 +40,13 @@ export const DEFAULT_CONFIG = {
     publishButton: '[data-test-id*="save"]',
   },
   timing: {
-    typingMinMs: 50,
-    typingMaxMs: 150,
-    wordPauseMs: 300,
-    stepMinMs: 1000,
-    stepMaxMs: 2500,
-    uploadWaitMs: 3000,
-    publishWaitMs: 2000,
+    typingMinMs: 5,
+    typingMaxMs: 10,
+    wordPauseMs: 10,
+    stepMinMs: 100,
+    stepMaxMs: 200,
+    uploadWaitMs: 1500,
+    publishWaitMs: 500,
   },
 };
 
@@ -70,3 +70,15 @@ export const JOB_STATUS = {
 export const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 export const MAX_BATCH_SIZE = 10;
+
+export const AUTHOR_NAME = 'Ahmed Alghra';
+
+export function filterTitle(title) {
+  if (!title) return title;
+  var result = title;
+  result = result.replace(/\bby\b(.+?)\bon\b/gi, function () {
+    return 'by ' + AUTHOR_NAME + ' on';
+  });
+  result = result.replace(/\bon\b.*/gi, ' on Memories Box Website');
+  return result;
+}
