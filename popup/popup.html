@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=400">
+  <title>PinFlow</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1 class="logo">PinFlow</h1>
+      <span class="version">v1.0.0</span>
+    </header>
+
+    <section id="active-profile-section" class="section">
+      <label class="section-label" for="active-profile">Active Profile</label>
+      <select id="active-profile" class="select-input">
+        <option value="">No profile selected</option>
+      </select>
+    </section>
+
+    <section id="profile-form-section" class="section">
+      <h2 class="section-title" id="form-toggle">
+        <span id="form-title">New Profile</span>
+        <span id="form-arrow" class="arrow">&#9660;</span>
+      </h2>
+      <form id="profile-form" class="form">
+        <input type="hidden" id="profile-id">
+        <div class="field">
+          <label for="profile-name">Name</label>
+          <input type="text" id="profile-name" maxlength="50" placeholder="e.g. Design Posts" required>
+          <span class="field-error" id="name-error"></span>
+        </div>
+        <div class="field">
+          <label for="profile-description">Description</label>
+          <textarea id="profile-description" maxlength="500" rows="3" placeholder="Pin description text..."></textarea>
+          <span class="char-count"><span id="desc-count">0</span>/500</span>
+          <span class="field-error" id="desc-error"></span>
+        </div>
+        <div class="field">
+          <label for="profile-hashtags">Hashtags</label>
+          <input type="text" id="profile-hashtags" placeholder="#design #ui #creative">
+          <span class="hint">Comma or space separated, max 20</span>
+          <span class="field-error" id="tags-error"></span>
+        </div>
+        <div class="field">
+          <label for="profile-website">Website URL</label>
+          <input type="url" id="profile-website" placeholder="https://example.com">
+          <span class="field-error" id="url-error"></span>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="save-btn">Save Profile</button>
+          <button type="button" class="btn btn-secondary" id="cancel-btn" style="display:none">Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="profile-list-section" class="section">
+      <h2 class="section-title">Profiles</h2>
+      <div id="profile-list" class="profile-list">
+        <p class="empty-state">No profiles yet. Create one above.</p>
+      </div>
+    </section>
+
+    <section id="settings-section" class="section collapsible">
+      <h2 class="section-title" id="settings-toggle">
+        Settings
+        <span id="settings-arrow" class="arrow">&#9654;</span>
+      </h2>
+      <div id="settings-body" class="collapsible-body" style="display:none">
+        <div class="field">
+          <label for="remote-config-url">Remote Config URL</label>
+          <input type="url" id="remote-config-url" class="input-full" placeholder="https://gist.githubusercontent.com/...">
+        </div>
+        <label class="toggle-row">
+          <span>Auto-close Pinterest tab</span>
+          <input type="checkbox" id="setting-auto-close">
+        </label>
+        <label class="toggle-row">
+          <span>Show toast notifications</span>
+          <input type="checkbox" id="setting-show-toasts" checked>
+        </label>
+        <label class="toggle-row">
+          <span>Batch mode</span>
+          <input type="checkbox" id="setting-batch-mode">
+        </label>
+        <div class="sync-row">
+          <span id="sync-status">Never synced</span>
+          <button class="btn btn-small" id="force-sync-btn">Force Sync</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="queue-section" class="section" style="display:none">
+      <h2 class="section-title">Pin Queue <span id="queue-count" class="badge">0</span></h2>
+      <div id="queue-list" class="queue-list"></div>
+      <button class="btn btn-primary btn-full" id="run-queue-btn" disabled>Publish Queue Now</button>
+    </section>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

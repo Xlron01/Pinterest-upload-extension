@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PinFlow Remote Config",
+  "description": "Schema for PinFlow remote configuration JSON",
+  "type": "object",
+  "required": ["version", "updatedAt", "selectors", "timing"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Semver version of the config"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO date string of last update"
+    },
+    "selectors": {
+      "type": "object",
+      "required": ["fileInput", "titleInput", "websiteInput", "tagsInput", "descriptionBox", "publishButton"],
+      "properties": {
+        "fileInput": {
+          "type": "string",
+          "description": "CSS selector for the file upload input"
+        },
+        "titleInput": {
+          "type": "string",
+          "description": "CSS selector for the title input field"
+        },
+        "websiteInput": {
+          "type": "string",
+          "description": "CSS selector for the website/link input field"
+        },
+        "tagsInput": {
+          "type": "string",
+          "description": "CSS selector for the hashtags/tags input field"
+        },
+        "descriptionBox": {
+          "type": "string",
+          "description": "CSS selector for the description textbox"
+        },
+        "publishButton": {
+          "type": "string",
+          "description": "CSS selector for the publish/save button"
+        }
+      },
+      "additionalProperties": false
+    },
+    "timing": {
+      "type": "object",
+      "required": ["typingMinMs", "typingMaxMs", "wordPauseMs", "stepMinMs", "stepMaxMs", "uploadWaitMs", "publishWaitMs"],
+      "properties": {
+        "typingMinMs": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Min ms between keystrokes"
+        },
+        "typingMaxMs": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Max ms between keystrokes"
+        },
+        "wordPauseMs": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Extra pause after each word"
+        },
+        "stepMinMs": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Min ms between major steps"
+        },
+        "stepMaxMs": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Max ms between major steps"
+        },
+        "uploadWaitMs": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Wait for Pinterest to process upload"
+        },
+        "publishWaitMs": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Wait after publish click"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
