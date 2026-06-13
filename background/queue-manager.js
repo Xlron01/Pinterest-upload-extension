@@ -41,7 +41,7 @@ export const queueManager = {
         if (tabNeedsNavigation) {
           console.log('[PinFlow] Navigating tab back to pin builder for next job...');
           await chrome.tabs.update(pinTab.id, { url: 'https://www.pinterest.com/pin-creation-tool/' });
-          await TabManager.waitForPageLoad(pinTab.id, 15000);
+          await TabManager.waitForPageLoad(pinTab.id, 30000);
         }
 
         const fetchResult = await Fetcher.fetchMedia(job.mediaUrl);
@@ -92,8 +92,6 @@ export const queueManager = {
 
         // نحدد أن التاب يحتاج تحديث للوظيفة القادمة
         tabNeedsNavigation = true;
-
-        await new Promise(r => setTimeout(r, TAB_CLOSE_DELAY_MS));
 
         const remaining = jobs.filter(j => j.status !== 'done').length;
         chrome.action.setBadgeText({ text: String(remaining) });

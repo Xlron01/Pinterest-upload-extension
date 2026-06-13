@@ -142,7 +142,7 @@ export async function handleBatchAdd(info, tab) {
 
   const job = {
     jobId: crypto.randomUUID(),
-    mediaType: info.mediaType || 'image',
+    mediaType: info.mediaType || (/\.(mp4|webm|mov|ogg|avi)(\?|$)/i.test(info.srcUrl || '') ? 'video' : 'image'),
     mediaUrl: info.srcUrl,
     title: filterTitle(tab.title || ''),
     description: profile ? profile.description : '',

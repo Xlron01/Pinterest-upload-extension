@@ -47,16 +47,24 @@ function scrapeImages() {
 
   var videoPosters = [].slice.call(document.querySelectorAll('video'));
   for (var k = 0; k < videoPosters.length; k++) {
-    var poster = videoPosters[k].poster;
+    var video = videoPosters[k];
+    // Try the video src directly first
+    var videoSrc = video.src || video.currentSrc;
+    if (videoSrc && !seen[videoSrc] && videoSrc.startsWith('http')) {
+      seen[videoSrc] = true;
+      results.push({ src: videoSrc, width: video.videoWidth || 0, height: video.videoHeight || 0, alt: 'video', isVideo: true });
+    }
+    // Also try the poster as an image
+    var poster = video.poster;
     if (poster && !seen[poster]) {
       seen[poster] = true;
       results.push({ src: poster, width: 0, height: 0, alt: 'video poster' });
     }
   }
 
-  var videos = [].slice.call(document.querySelectorAll('video source'));
-  for (var m = 0; m < videos.length; m++) {
-    var vsrc = videos[m].src;
+  var videoSources = [].slice.call(document.querySelectorAll('video source'));
+  for (var m = 0; m < videoSources.length; m++) {
+    var vsrc = videoSources[m].src;
     if (vsrc && !seen[vsrc]) {
       seen[vsrc] = true;
       results.push({ src: vsrc, width: 0, height: 0, alt: 'video', isVideo: true });

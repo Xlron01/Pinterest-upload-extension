@@ -127,7 +127,7 @@ async function runPinJob(job) {
     // ← الإصلاح 1: استبدال الانتظار الثابت بمراقبة ديناميكية لاكتمال الرفع
     var uploadMaxWait = (job.timing && job.timing.uploadWaitMs) ? Math.max(job.timing.uploadWaitMs, 8000) : 12000;
     await waitForUploadToComplete(uploadMaxWait);
-    await Humanizer.delay(job.timing.stepMinMs || 800);
+    await Humanizer.delay(50); // Minimal delay
 
     updateStatus(job.jobId, 'filling');
     console.log('[PinFlow] === Starting field fill phase ===');
@@ -139,7 +139,7 @@ async function runPinJob(job) {
       console.log('[PinFlow] Title field FOUND:', titleEl.selector);
       await fillInputElement(titleEl.element, job.title);
       usedElements.push(titleEl.element);
-      await Humanizer.delay(job.timing.stepMinMs);
+      await Humanizer.delay(50);
     } else {
       console.warn('[PinFlow] Title field NOT found');
     }
@@ -149,7 +149,7 @@ async function runPinJob(job) {
       console.log('[PinFlow] Website field FOUND:', websiteEl.selector);
       await fillInputElement(websiteEl.element, job.websiteUrl);
       usedElements.push(websiteEl.element);
-      await Humanizer.delay(job.timing.stepMinMs);
+      await Humanizer.delay(50);
     } else {
       console.warn('[PinFlow] Website field NOT found');
     }
@@ -159,7 +159,7 @@ async function runPinJob(job) {
       console.log('[PinFlow] Description field FOUND:', descEl.selector);
       await fillContentEditable(descEl.element, job.description || '');
       usedElements.push(descEl.element);
-      await Humanizer.delay(job.timing.stepMinMs);
+      await Humanizer.delay(50);
     } else {
       console.warn('[PinFlow] Description field NOT found');
     }
@@ -170,7 +170,7 @@ async function runPinJob(job) {
       var cleanTags = (job.hashtags || []).map(function (t) { return t.replace(/^#/, ''); }).filter(function (t) { return t.length > 0; });
       await fillTagsField(tagsEl.element, cleanTags);
       usedElements.push(tagsEl.element);
-      await Humanizer.delay(job.timing.stepMinMs);
+      await Humanizer.delay(50);
     } else {
       console.warn('[PinFlow] Tags field NOT found or no hashtags');
     }
@@ -218,33 +218,21 @@ async function fillInputElement(el, value) {
 
   el.focus();
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  await Humanizer.delay(50);
 
   var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
 
   if (nativeSetter) {
-    nativeSetter.set.call(el, '');
+    nativeSetter.set.call(el, value);
   } else {
-    el.value = '';
+    el.value = value;
   }
+  
   el.dispatchEvent(new Event('input', { bubbles: true }));
-
-  await Humanizer.delay(30);
-
-  for (var i = 0; i < value.length; i++) {
-    var ch = value[i];
-    if (nativeSetter) {
-      nativeSetter.set.call(el, el.value + ch);
-    } else {
-      el.value += ch;
-    }
-el.dispatchEvent(new Event('input', { bubbles: true }));
-      await Humanizer.delay(getTiming().typingMinMs);
-  }
-
   el.dispatchEvent(new Event('change', { bubbles: true }));
   el.dispatchEvent(new Event('blur', { bubbles: true }));
+  
   console.log('[PinFlow] INPUT field filled. Final value:', el.value);
+  await Humanizer.delay(10);
 }
 
 async function fillContentEditable(el, value) {
@@ -253,7 +241,6 @@ async function fillContentEditable(el, value) {
   var innerSpan = el.querySelector('span[data-offset-key]');
 
   el.focus();
-  await Humanizer.delay(30);
 
   var selection = window.getSelection();
   var range = document.createRange();
@@ -273,7 +260,7 @@ async function fillContentEditable(el, value) {
   }
 
   el.blur();
-  await Humanizer.delay(30);
+  await Humanizer.delay(10);
 
   console.log('[PinFlow] Description filled. Text length:', (el.textContent || '').length);
 }
@@ -282,43 +269,26 @@ async function fillTagsField(el, tags) {
   if (!tags || tags.length === 0) return;
 
   console.log('[PinFlow] Filling tags:', tags.join(', '));
-
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  await Humanizer.delay(30);
 
   for (var i = 0; i < tags.length; i++) {
     var tag = tags[i].trim();
     if (!tag) continue;
 
     console.log('[PinFlow] === Typing tag ' + (i + 1) + '/' + tags.length + ':', tag);
-
     el.focus();
-    await Humanizer.delay(30);
 
     var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
     if (nativeSetter) {
-      nativeSetter.set.call(el, '');
+      nativeSetter.set.call(el, tag);
     } else {
-      el.value = '';
+      el.value = tag;
     }
     el.dispatchEvent(new Event('input', { bubbles: true }));
-
-    for (var j = 0; j < tag.length; j++) {
-      var ch = tag[j];
-      el.dispatchEvent(new KeyboardEvent('keydown', { key: ch, code: 'Key' + ch.toUpperCase(), bubbles: true, cancelable: true }));
-      el.dispatchEvent(new KeyboardEvent('keypress', { key: ch, code: 'Key' + ch.toUpperCase(), bubbles: true, cancelable: true }));
-      if (nativeSetter) {
-        nativeSetter.set.call(el, el.value + ch);
-      } else {
-        el.value += ch;
-      }
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.dispatchEvent(new KeyboardEvent('keyup', { key: ch, code: 'Key' + ch.toUpperCase(), bubbles: true }));
-      await Humanizer.delay(getTiming().typingMinMs);
-    }
+    el.dispatchEvent(new KeyboardEvent('keyup', { key: 'A', code: 'KeyA', bubbles: true }));
 
     console.log('[PinFlow] Typed tag text, waiting for dropdown...');
-    await Humanizer.delay(500);
+    await Humanizer.delay(200);
 
     var suggestionClicked = await findAndClickFirstSuggestion(el);
     if (suggestionClicked) {
@@ -329,7 +299,7 @@ async function fillTagsField(el, tags) {
       el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
     }
 
-    await Humanizer.delay(200);
+    await Humanizer.delay(50);
   }
 
   el.blur();

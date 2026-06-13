@@ -19,10 +19,11 @@ export const TabManager = {
 
     const win = await chrome.windows.create({
       url: PINTEREST_PIN_BUILDER,
-      width: 1024,
-      height: 768,
-      focused: true,
-      state: 'normal',
+      width: 800,
+      height: 600,
+      left: 0,
+      top: 0,
+      focused: false,
     });
 
     let tab = win.tabs && win.tabs.length > 0 ? win.tabs[0] : null;
