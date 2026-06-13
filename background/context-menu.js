@@ -91,9 +91,7 @@ export async function handleSinglePin(info, tab) {
       status: 'error',
       message: 'Pinterest page not ready. Are you logged into Pinterest?',
     });
-    if (settings.autoCloseTab) {
-      chrome.tabs.remove(pinTab.id).catch(() => {});
-    }
+    chrome.tabs.remove(pinTab.id).catch(() => {});
     return;
   }
 
@@ -108,9 +106,7 @@ export async function handleSinglePin(info, tab) {
       status: 'error',
       message: 'Failed to communicate with Pinterest page',
     });
-    if (settings.autoCloseTab) {
-      chrome.tabs.remove(pinTab.id).catch(() => {});
-    }
+    chrome.tabs.remove(pinTab.id).catch(() => {});
     return;
   }
 
@@ -126,9 +122,7 @@ export async function handleSinglePin(info, tab) {
     });
   }
 
-  if (settings.autoCloseTab) {
-    await TabManager.closePinterestTab(pinTab.id);
-  }
+  await TabManager.closePinterestTab(pinTab.id);
 }
 
 export async function handleBatchAdd(info, tab) {
@@ -227,7 +221,7 @@ export async function handleBatchRun(tab) {
       job.errorMessage = err.message;
     }
 
-    if (settings.autoCloseTab && pinTab) {
+    if (pinTab) {
       chrome.tabs.remove(pinTab.id).catch(() => {});
     }
 

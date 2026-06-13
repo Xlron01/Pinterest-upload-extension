@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=400">
+  <meta name="viewport" content="width=450">
   <title>PinFlow</title>
   <link rel="stylesheet" href="popup.css">
 </head>
@@ -10,7 +10,7 @@
   <div class="container">
     <header class="header">
       <h1 class="logo">PinFlow</h1>
-      <span class="version">v1.0.0</span>
+      <span class="version">v1.1.0</span>
     </header>
 
     <section id="active-profile-section" class="section">
@@ -20,12 +20,23 @@
       </select>
     </section>
 
+    <section id="scrape-section" class="section">
+      <button class="btn btn-primary btn-full" id="scrape-btn">Capture Images from Page</button>
+      <div id="image-grid" class="image-grid" style="display:none;"></div>
+      <div id="selection-bar" class="selection-bar" style="display:none;">
+        <span id="selection-count">0 selected</span>
+        <button class="btn btn-primary btn-small" id="add-selected-btn">Add to Queue (max 25)</button>
+        <button class="btn btn-secondary btn-small" id="select-all-btn">Select All</button>
+        <button class="btn btn-secondary btn-small" id="deselect-all-btn">Clear</button>
+      </div>
+    </section>
+
     <section id="profile-form-section" class="section">
       <h2 class="section-title" id="form-toggle">
         <span id="form-title">New Profile</span>
         <span id="form-arrow" class="arrow">&#9660;</span>
       </h2>
-      <form id="profile-form" class="form">
+      <form id="profile-form" class="form" style="display:none;">
         <input type="hidden" id="profile-id">
         <div class="field">
           <label for="profile-name">Name</label>
@@ -63,6 +74,19 @@
       </div>
     </section>
 
+    <section id="queue-section" class="section" style="display:none;">
+      <h2 class="section-title">Pin Queue <span id="queue-count" class="badge">0</span></h2>
+      <p class="queue-hint" id="queue-hint">Images will be published one by one in the background. You can close this popup.</p>
+      <div id="queue-list" class="queue-list"></div>
+      <div class="queue-actions">
+        <button class="btn btn-primary btn-full" id="run-queue-btn" disabled>Publish Queue Now</button>
+        <button class="btn btn-danger btn-full" id="clear-queue-btn" style="display:none;">Clear Queue</button>
+      </div>
+      <div id="queue-progress" class="progress-bar" style="display:none;">
+        <div id="queue-progress-fill" class="progress-fill" style="width:0%"></div>
+      </div>
+    </section>
+
     <section id="settings-section" class="section collapsible">
       <h2 class="section-title" id="settings-toggle">
         Settings
@@ -74,28 +98,14 @@
           <input type="url" id="remote-config-url" class="input-full" placeholder="https://gist.githubusercontent.com/...">
         </div>
         <label class="toggle-row">
-          <span>Auto-close Pinterest tab</span>
-          <input type="checkbox" id="setting-auto-close">
-        </label>
-        <label class="toggle-row">
           <span>Show toast notifications</span>
           <input type="checkbox" id="setting-show-toasts" checked>
-        </label>
-        <label class="toggle-row">
-          <span>Batch mode</span>
-          <input type="checkbox" id="setting-batch-mode">
         </label>
         <div class="sync-row">
           <span id="sync-status">Never synced</span>
           <button class="btn btn-small" id="force-sync-btn">Force Sync</button>
         </div>
       </div>
-    </section>
-
-    <section id="queue-section" class="section" style="display:none">
-      <h2 class="section-title">Pin Queue <span id="queue-count" class="badge">0</span></h2>
-      <div id="queue-list" class="queue-list"></div>
-      <button class="btn btn-primary btn-full" id="run-queue-btn" disabled>Publish Queue Now</button>
     </section>
   </div>
 

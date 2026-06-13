@@ -1,11 +1,11 @@
 var DEFAULT_TIMING = {
-  typingMinMs: 5,
-  typingMaxMs: 10,
-  wordPauseMs: 10,
-  stepMinMs: 100,
-  stepMaxMs: 200,
-  uploadWaitMs: 1500,
-  publishWaitMs: 500,
+  typingMinMs: 50,
+  typingMaxMs: 120,
+  wordPauseMs: 200,
+  stepMinMs: 800,
+  stepMaxMs: 1500,
+  uploadWaitMs: 3000,
+  publishWaitMs: 2000,
 };
 
 var _cfg = null;
@@ -72,9 +72,9 @@ var Humanizer = {
     el.dispatchEvent(new MouseEvent('mouseover', evOpts));
     el.dispatchEvent(new MouseEvent('mouseenter', evOpts));
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    await this.delay(10, 20);
+    await this.delay(80, 150);
     el.dispatchEvent(new MouseEvent('mousedown', evOpts));
-    await this.delay(5, 15);
+    await this.delay(50, 100);
     el.dispatchEvent(new MouseEvent('mouseup', evOpts));
     el.dispatchEvent(new MouseEvent('click', evOpts));
   },

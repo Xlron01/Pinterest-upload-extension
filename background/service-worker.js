@@ -1,6 +1,7 @@
 import { ConfigManager } from './config-manager.js';
 import { ContextMenu, handleSinglePin, handleBatchAdd, handleBatchRun } from './context-menu.js';
-import { MSG_TYPES, STORAGE_KEYS } from '../shared/constants.js';
+import { MSG_TYPES, STORAGE_KEYS, QUEUE_DELAY_MS } from '../shared/constants.js';
+import { queueManager } from './queue-manager.js';
 
 chrome.runtime.onInstalled.addListener(async () => {
   await ConfigManager.initDefaults();
@@ -45,6 +46,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === MSG_TYPES.JOB_STATUS_UPDATE) {
     handleJobStatusUpdate(msg.jobId, msg.status, msg.error).then(sendResponse);
+    return true;
+  }
+
+  if (msg.type === MSG_TYPES.START_BATCH_QUEUE) {
+    queueManager.start().then(() => {
+      sendResponse({ success: true });
+    }).catch((err) => {
+      sendResponse({ success: false, error: err.message });
+    });
     return true;
   }
 });

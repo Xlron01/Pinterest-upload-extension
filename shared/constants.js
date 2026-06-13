@@ -8,6 +8,9 @@ export const MSG_TYPES = {
   SET_ACTIVE_PROFILE: 'SET_ACTIVE_PROFILE',
   FORCE_CONFIG_SYNC: 'FORCE_CONFIG_SYNC',
   STATE_UPDATED: 'STATE_UPDATED',
+  SCRAPE_IMAGES: 'SCRAPE_IMAGES',
+  START_BATCH_QUEUE: 'START_BATCH_QUEUE',
+  QUEUE_PROGRESS: 'QUEUE_PROGRESS',
 };
 
 export const STORAGE_KEYS = {
@@ -40,13 +43,13 @@ export const DEFAULT_CONFIG = {
     publishButton: '[data-test-id*="save"]',
   },
   timing: {
-    typingMinMs: 5,
-    typingMaxMs: 10,
-    wordPauseMs: 10,
-    stepMinMs: 100,
-    stepMaxMs: 200,
-    uploadWaitMs: 1500,
-    publishWaitMs: 500,
+    typingMinMs: 50,
+    typingMaxMs: 120,
+    wordPauseMs: 200,
+    stepMinMs: 800,
+    stepMaxMs: 1500,
+    uploadWaitMs: 3000,
+    publishWaitMs: 2000,
   },
 };
 
@@ -69,7 +72,9 @@ export const JOB_STATUS = {
 
 export const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
-export const MAX_BATCH_SIZE = 10;
+export const MAX_BATCH_SIZE = 25;
+
+export const QUEUE_DELAY_MS = 5000;
 
 export const AUTHOR_NAME = 'Ahmed Alghra';
 

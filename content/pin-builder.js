@@ -169,7 +169,9 @@ async function runPinJob(job) {
     var publishBtn = await findPublishButton(10000);
     console.log('[PinFlow] Publish button found, clicking...', publishBtn);
     await Humanizer.humanClick(publishBtn);
-    await Humanizer.delay(job.timing.publishWaitMs);
+
+    var publishResult = await waitForPublishToComplete();
+    console.log('[PinFlow] Publish result:', publishResult);
 
     updateStatus(job.jobId, 'done');
     console.log('[PinFlow] Pin job completed successfully!');
@@ -503,4 +505,79 @@ function updateStatus(jobId, status, error) {
     status: status,
     error: error || undefined,
   }).catch(function () {});
+}
+
+function waitForPublishToComplete() {
+  return new Promise(function (resolve) {
+    console.log('[PinFlow] Two-phase publish observer starting...');
+
+    var startedPublishing = false;
+
+    var observer = new MutationObserver(function () {
+      var draftsContainer = document.querySelector('[data-test-id="drafts-container"]');
+
+      if (!draftsContainer) {
+        if (startedPublishing) {
+          console.log('[PinFlow] Drafts container disappeared after publishing started — publish complete!');
+          observer.disconnect();
+          clearTimeout(timeout);
+          resolve('completed');
+        }
+        return;
+      }
+
+      var text = (draftsContainer.innerText || '').toLowerCase();
+      var hasPublishingText = text.indexOf('جاري النشر') !== -1 ||
+        text.indexOf('publishing') !== -1 ||
+        text.indexOf('saving') !== -1 ||
+        text.indexOf('creating') !== -1;
+
+      if (!startedPublishing && hasPublishingText) {
+        startedPublishing = true;
+        console.log('[PinFlow] Publishing detected! Waiting for it to complete...');
+      }
+
+      if (startedPublishing && !hasPublishingText) {
+        console.log('[PinFlow] Publishing text disappeared — pin is done!');
+        observer.disconnect();
+        clearTimeout(timeout);
+        resolve('completed');
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    var checkStartInterval = setInterval(function () {
+      var draftsContainer = document.querySelector('[data-test-id="drafts-container"]');
+      if (draftsContainer) {
+        var text = (draftsContainer.innerText || '').toLowerCase();
+        var hasPublishingText = text.indexOf('جاري النشر') !== -1 ||
+          text.indexOf('publishing') !== -1 ||
+          text.indexOf('saving') !== -1 ||
+          text.indexOf('creating') !== -1;
+
+        if (hasPublishingText) {
+          startedPublishing = true;
+          console.log('[PinFlow] Publishing detected on interval check!');
+          clearInterval(checkStartInterval);
+        }
+      }
+    }, 500);
+
+    setTimeout(function () {
+      clearInterval(checkStartInterval);
+      observer.disconnect();
+      if (!startedPublishing) {
+        console.log('[PinFlow] No publishing detected within 10s — assuming pin was submitted');
+        resolve('no_publishing_detected');
+      } else {
+        console.log('[PinFlow] Publish timeout (30s) — assuming done');
+        resolve('timeout');
+      }
+    }, 10000);
+  });
 }
