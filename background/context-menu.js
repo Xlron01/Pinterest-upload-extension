@@ -91,7 +91,7 @@ export async function handleSinglePin(info, tab) {
       status: 'error',
       message: 'Pinterest page not ready. Are you logged into Pinterest?',
     });
-    chrome.tabs.remove(pinTab.id).catch(() => {});
+    chrome.tabs.remove(pinTab.id).catch(() => { });
     return;
   }
 
@@ -106,7 +106,7 @@ export async function handleSinglePin(info, tab) {
       status: 'error',
       message: 'Failed to communicate with Pinterest page',
     });
-    chrome.tabs.remove(pinTab.id).catch(() => {});
+    chrome.tabs.remove(pinTab.id).catch(() => { });
     return;
   }
 
@@ -222,7 +222,7 @@ export async function handleBatchRun(tab) {
     }
 
     if (pinTab) {
-      chrome.tabs.remove(pinTab.id).catch(() => {});
+      chrome.tabs.remove(pinTab.id).catch(() => { });
     }
 
     await chrome.storage.local.set({ [STORAGE_KEYS.PENDING_JOBS]: jobs });
@@ -258,9 +258,9 @@ export const ToastBridge = {
           chrome.tabs.sendMessage(tabId, {
             type: MSG_TYPES.SHOW_TOAST,
             toast,
-          }).catch(() => {});
+          }).catch(() => { });
         }, 100);
-      }).catch(() => {});
+      }).catch(() => { });
     } catch (err) {
       console.warn('[PinFlow] ToastBridge failed:', err.message);
     }

@@ -114,7 +114,7 @@ pinflow/
   },
   "content_scripts": [{
     "matches": [
-      
+    
       "https://www.pinterest.com/pin-creation-tool/*"
     ],
     "js": ["content/humanizer.js", "content/pin-builder.js"],

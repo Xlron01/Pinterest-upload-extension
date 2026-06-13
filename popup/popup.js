@@ -409,7 +409,10 @@ class PopupApp {
     const name = document.getElementById('profile-name').value.trim();
     const description = document.getElementById('profile-description').value.trim();
     const hashtagsRaw = document.getElementById('profile-hashtags').value.trim();
-    const websiteUrl = document.getElementById('profile-website').value.trim();
+    let websiteUrl = document.getElementById('profile-website').value.trim();
+    if (websiteUrl && !/^https?:\/\//i.test(websiteUrl)) {
+      websiteUrl = 'https://' + websiteUrl;
+    }
     const hashtags = sanitizeHashtags(hashtagsRaw);
     let hasError = false;
 

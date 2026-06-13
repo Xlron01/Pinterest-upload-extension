@@ -3,6 +3,14 @@ import { ContextMenu, handleSinglePin, handleBatchAdd, handleBatchRun } from './
 import { MSG_TYPES, STORAGE_KEYS, QUEUE_DELAY_MS } from '../shared/constants.js';
 import { queueManager } from './queue-manager.js';
 
+chrome.alarms.create('keepAlive', { periodInMinutes: 0.4 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'keepAlive') {
+    // Keep the service worker alive
+    chrome.storage.local.get('pendingJobs');
+  }
+});
+
 chrome.runtime.onInstalled.addListener(async () => {
   await ConfigManager.initDefaults();
   await ConfigManager.syncRemote();
@@ -117,7 +125,7 @@ async function handleJobStatusUpdate(jobId, status, error) {
 }
 
 function broadcastStateUpdate() {
-  chrome.runtime.sendMessage({ type: MSG_TYPES.STATE_UPDATED }).catch(() => {});
+  chrome.runtime.sendMessage({ type: MSG_TYPES.STATE_UPDATED }).catch(() => { });
 }
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {

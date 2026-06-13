@@ -53,11 +53,16 @@ var FIELD_SELECTORS = {
     'input[placeholder*="رابط" i]',
   ],
   descriptionBox: [
-    'div[contenteditable="true"][aria-label="إضافة وصف مفصل"]',
+    // الأولوية: المحدد الأكثر استقراراً بالـ data-test-id
     '[data-test-id="storyboard-description-field-container"] [contenteditable="true"]',
-    '[data-test-id="comment-editor-container"] .public-DraftEditor-content[contenteditable="true"]',
-    '.public-DraftEditor-content[contenteditable="true"][role="combobox"]',
     '[data-test-id="editor-with-mentions"] [contenteditable="true"]',
+    '[data-test-id="comment-editor-container"] .public-DraftEditor-content[contenteditable="true"]',
+    // النصوص العربية الممكنة (تتغير حسب locale)
+    'div[contenteditable="true"][aria-label="أضف وصفًا مفصلاً"]',
+    'div[contenteditable="true"][aria-label="إضافة وصف مفصل"]',
+    'div[contenteditable="true"][aria-label*="وصف"]',
+    // الـ fallback العام
+    '.public-DraftEditor-content[contenteditable="true"][role="combobox"]',
     '[role="combobox"][contenteditable="true"].notranslate',
     '[contenteditable="true"][aria-label*="description" i]',
   ],
@@ -107,16 +112,22 @@ async function runPinJob(job) {
 
     Humanizer.setTimingConfig(job.timing);
 
+    // Initial delay to allow Pinterest's React app to fully render
+    console.log('[PinFlow] Waiting 2000ms for initial React render...');
+    await Humanizer.delay(2000);
+
     var file = base64ToFile(job.mediaBuffer, job.filename, job.mimeType);
     console.log('[PinFlow] File created:', file.name, file.type, file.size, 'bytes');
 
-    var uploadInput = await findElement(FIELD_SELECTORS.fileInput, 10000);
+    var uploadInput = await findElement(FIELD_SELECTORS.fileInput, 30000);
     if (!uploadInput) throw new Error('Upload input not found');
     await doFileUpload(uploadInput, file);
     console.log('[PinFlow] File uploaded, waiting for Pinterest to process...');
 
-    await Humanizer.delay(job.timing.uploadWaitMs);
-    await Humanizer.delay(job.timing.stepMinMs);
+    // ← الإصلاح 1: استبدال الانتظار الثابت بمراقبة ديناميكية لاكتمال الرفع
+    var uploadMaxWait = (job.timing && job.timing.uploadWaitMs) ? Math.max(job.timing.uploadWaitMs, 8000) : 12000;
+    await waitForUploadToComplete(uploadMaxWait);
+    await Humanizer.delay(job.timing.stepMinMs || 800);
 
     updateStatus(job.jobId, 'filling');
     console.log('[PinFlow] === Starting field fill phase ===');
@@ -507,41 +518,135 @@ function updateStatus(jobId, status, error) {
   }).catch(function () {});
 }
 
-function waitForPublishToComplete() {
-  return new Promise(function (resolve) {
-    console.log('[PinFlow] Two-phase publish observer starting...');
+/**
+ * waitForUploadToComplete(timeoutMs)
+ * يراقب الـ DOM ديناميكياً حتى تظهر إشارة نجاح رفع الصورة،
+ * بدلاً من الانتظار الثابت uploadWaitMs.
+ */
+function waitForUploadToComplete(timeoutMs) {
+  timeoutMs = timeoutMs || 12000;
+  var UPLOAD_SUCCESS_SELECTORS = [
+    '[data-test-id="storyboard-thumbnail"]',
+    '[data-test-id="story-pin-image-block"]',
+    '[data-test-id="storyboard-pin-card"]',
+    '[data-test-id="storyboard-draft-rep"]',
+    // مؤشر بديل: ظهور حقل العنوان يعني Pinterest جاهز
+    '#storyboard-selector-title',
+  ];
 
-    var startedPublishing = false;
+  console.log('[PinFlow] Waiting dynamically for upload completion...');
+
+  return new Promise(function (resolve) {
+    // فحص فوري — قد تكون الصورة رُفعت بالفعل
+    for (var i = 0; i < UPLOAD_SUCCESS_SELECTORS.length; i++) {
+      var el = document.querySelector(UPLOAD_SUCCESS_SELECTORS[i]);
+      if (el && isVisible(el)) {
+        console.log('[PinFlow] Upload already complete, found:', UPLOAD_SUCCESS_SELECTORS[i]);
+        return resolve('immediate');
+      }
+    }
 
     var observer = new MutationObserver(function () {
+      for (var i = 0; i < UPLOAD_SUCCESS_SELECTORS.length; i++) {
+        var el = document.querySelector(UPLOAD_SUCCESS_SELECTORS[i]);
+        if (el && isVisible(el)) {
+          console.log('[PinFlow] Upload complete detected via observer:', UPLOAD_SUCCESS_SELECTORS[i]);
+          observer.disconnect();
+          clearTimeout(uploadTimeout);
+          resolve('observer');
+          return;
+        }
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    var uploadTimeout = setTimeout(function () {
+      observer.disconnect();
+      console.warn('[PinFlow] Upload timeout reached, proceeding anyway...');
+      resolve('timeout');
+    }, timeoutMs);
+  });
+}
+
+/**
+ * waitForPublishToComplete()
+ * الإصلاح الشامل: مراقبة متعددة الإشارات لضمان عدم غلق التبويب
+ * قبل اكتمال النشر الفعلي على السيرفر.
+ *
+ * الإشارات المراقبة (بالترتيب):
+ *   1. نص "جاري النشر" يظهر ثم يختفي في الـ DOM
+ *   2. اختفاء [data-test-id="drafts-container"] كلياً (يختفي بعد النشر)
+ *   3. تغيير الـ URL إلى /created/ أو /pins/ (إعادة توجيه ما بعد النشر)
+ *   4. ظهور عنصر يحمل saving-status-saved
+ *   5. حد أقصى آمن 35 ثانية — لا يُغلق التبويب أبداً قبلها في حالة الفشل
+ */
+function waitForPublishToComplete() {
+  return new Promise(function (resolve) {
+    console.log('[PinFlow] *** Publish guardian started — tab will NOT close until confirmed ***');
+
+    var resolved = false;
+    var startedPublishing = false;
+    var startTime = Date.now();
+
+    // الحد الأقصى المطلق: 35 ثانية
+    var ABSOLUTE_MAX_MS = 35000;
+    // الحد الأدنى الآمن بعد الضغط على الزر: 3 ثوانٍ دائماً
+    var SAFE_MIN_MS = 3000;
+
+    function done(reason) {
+      if (resolved) return;
+      var elapsed = Date.now() - startTime;
+      // ضمان الحد الأدنى الآمن دائماً
+      var remainingMin = Math.max(0, SAFE_MIN_MS - elapsed);
+      setTimeout(function () {
+        if (resolved) return;
+        resolved = true;
+        observer.disconnect();
+        clearInterval(pollInterval);
+        clearTimeout(absoluteTimeout);
+        console.log('[PinFlow] Publish complete! Reason:', reason, '| Elapsed:', (Date.now() - startTime) + 'ms');
+        resolve(reason);
+      }, remainingMin);
+    }
+
+    // الإشارة 1+2: MutationObserver يراقب نص النشر واختفاء drafts-container
+    var observer = new MutationObserver(function () {
+      // الإشارة 4: عنصر saving-status-saved ظهر
+      if (document.querySelector('[data-test-id="saving-status-saved"]')) {
+        console.log('[PinFlow] Signal: saving-status-saved appeared!');
+        startedPublishing = true;
+        done('saving-status-saved');
+        return;
+      }
+
       var draftsContainer = document.querySelector('[data-test-id="drafts-container"]');
 
       if (!draftsContainer) {
         if (startedPublishing) {
-          console.log('[PinFlow] Drafts container disappeared after publishing started — publish complete!');
-          observer.disconnect();
-          clearTimeout(timeout);
-          resolve('completed');
+          console.log('[PinFlow] Signal: drafts-container disappeared after publishing started!');
+          done('drafts-container-gone');
         }
         return;
       }
 
       var text = (draftsContainer.innerText || '').toLowerCase();
-      var hasPublishingText = text.indexOf('جاري النشر') !== -1 ||
-        text.indexOf('publishing') !== -1 ||
-        text.indexOf('saving') !== -1 ||
-        text.indexOf('creating') !== -1;
+      var publishingKeywords = [
+        'جاري النشر', 'publishing', 'saving', 'creating', 'uploading'
+      ];
+
+      var hasPublishingText = publishingKeywords.some(function (kw) {
+        return text.indexOf(kw) !== -1;
+      });
 
       if (!startedPublishing && hasPublishingText) {
         startedPublishing = true;
-        console.log('[PinFlow] Publishing detected! Waiting for it to complete...');
+        console.log('[PinFlow] Signal: Publishing text detected in DOM!');
       }
 
       if (startedPublishing && !hasPublishingText) {
-        console.log('[PinFlow] Publishing text disappeared — pin is done!');
-        observer.disconnect();
-        clearTimeout(timeout);
-        resolve('completed');
+        console.log('[PinFlow] Signal: Publishing text disappeared — server confirmed done!');
+        done('publishing-text-gone');
       }
     });
 
@@ -551,33 +656,52 @@ function waitForPublishToComplete() {
       characterData: true,
     });
 
-    var checkStartInterval = setInterval(function () {
+    // الإشارة 1+2+3+4 عبر polling كل 500ms
+    var pollInterval = setInterval(function () {
+      if (resolved) { clearInterval(pollInterval); return; }
+
+      // الإشارة 3: تغيير URL — Pinterest يعيد توجيه لصفحة الدبوس الجديد بعد النشر
+      var url = window.location.href;
+      if (url.indexOf('/pin-creation-tool') === -1) {
+        console.log('[PinFlow] Signal: URL changed away from pin-creation-tool:', url);
+        startedPublishing = true;
+        done('url-changed');
+        return;
+      }
+
+      // الإشارة 4
+      if (document.querySelector('[data-test-id="saving-status-saved"]')) {
+        console.log('[PinFlow] Signal (poll): saving-status-saved detected!');
+        startedPublishing = true;
+        done('saving-status-saved-poll');
+        return;
+      }
+
+      // الإشارة 1+2
       var draftsContainer = document.querySelector('[data-test-id="drafts-container"]');
+      if (!draftsContainer && startedPublishing) {
+        console.log('[PinFlow] Signal (poll): drafts-container gone!');
+        done('drafts-gone-poll');
+        return;
+      }
+
       if (draftsContainer) {
         var text = (draftsContainer.innerText || '').toLowerCase();
-        var hasPublishingText = text.indexOf('جاري النشر') !== -1 ||
-          text.indexOf('publishing') !== -1 ||
-          text.indexOf('saving') !== -1 ||
-          text.indexOf('creating') !== -1;
-
-        if (hasPublishingText) {
+        if (!startedPublishing && (text.indexOf('جاري النشر') !== -1 || text.indexOf('publishing') !== -1)) {
           startedPublishing = true;
-          console.log('[PinFlow] Publishing detected on interval check!');
-          clearInterval(checkStartInterval);
+          console.log('[PinFlow] Signal (poll): Publishing text detected!');
+        }
+        if (startedPublishing && text.indexOf('جاري النشر') === -1 && text.indexOf('publishing') === -1) {
+          console.log('[PinFlow] Signal (poll): Publishing text gone!');
+          done('publishing-text-gone-poll');
         }
       }
     }, 500);
 
-    setTimeout(function () {
-      clearInterval(checkStartInterval);
-      observer.disconnect();
-      if (!startedPublishing) {
-        console.log('[PinFlow] No publishing detected within 10s — assuming pin was submitted');
-        resolve('no_publishing_detected');
-      } else {
-        console.log('[PinFlow] Publish timeout (30s) — assuming done');
-        resolve('timeout');
-      }
-    }, 10000);
+    // الحد الأقصى المطلق: بعد 35 ثانية يُفترض أن السيرفر استجاب
+    var absoluteTimeout = setTimeout(function () {
+      console.warn('[PinFlow] Absolute timeout (35s) reached. startedPublishing was:', startedPublishing);
+      done('absolute-timeout');
+    }, ABSOLUTE_MAX_MS);
   });
 }

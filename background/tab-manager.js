@@ -17,10 +17,19 @@ export const TabManager = {
       return existingCreate2[0];
     }
 
-    const tab = await chrome.tabs.create({
+    const win = await chrome.windows.create({
       url: PINTEREST_PIN_BUILDER,
-      active: false,
+      width: 1024,
+      height: 768,
+      focused: true,
+      state: 'normal',
     });
+
+    let tab = win.tabs && win.tabs.length > 0 ? win.tabs[0] : null;
+    if (!tab) {
+      const tabs = await chrome.tabs.query({ windowId: win.id });
+      tab = tabs[0];
+    }
 
     await this.waitForPageLoad(tab.id);
     return tab;
